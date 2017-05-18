@@ -14,11 +14,13 @@
   (lambda (x) (f (g x))))
 
 
+
 ;; Exercise 1.7.2
 ;; 1.7.1 (a)
 (define (pow x y)
   (if (= 0 y) 1 (* x (pow x (- y 1)))))
-(pow 2 10)
+;(pow 2 10)
+
 ;; 1.7.1 (b)
 (define (maximum l)
   (if (= (length l) 1)
@@ -27,13 +29,15 @@
         (if (> (car l) rest-maximum)
             (car l)
             rest-maximum))))
-(maximum '(1 2 65 2 9))
+;(maximum '(1 2 65 2 9))
+
 ;; 1.7.1 (c)
 (define (rev l)
   (cond ((not (list? l))  #f)
         ((= (length l) 0) '())
         ((> (length l) 0) (append (rev (cdr l)) (list (car l))))))
 (rev '(1 2 65 2 9))
+
 
 
 ;; Exercise 1.7.3
@@ -53,10 +57,12 @@
 ;; Exercise 1.7.4
 ;; 1.7.4 (a)
 (define is-variable? symbol?)
+
 (define (is-application? term)
   (and (= (length term) 2)
        (is-lambda-term? (car term))
        (is-lambda-term? (cadr term))))
+
 (define (is-abstraction? term)
   (and (= (length term) 3)
        (eq? (car term) 'lambda)
@@ -69,11 +75,13 @@
   (or (is-variable? term) (is-application? term) (is-abstraction? term)))
 
 ;; 1.7.4 (b)
+;; For DrRacket+R5RS compatibility, because 'filter' not present in R5RS
 (define (my-filter pred list)
   (cond ((null? list) '())
         ((pred (car list))
          (cons (car list) (my-filter pred (cdr list))))
         (else (my-filter pred (cdr list)))))
+
 ;; helper function to remove item from list
 (define (list-remove-item item list)
   (my-filter (lambda (x) (not (equal? x item))) list))
