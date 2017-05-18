@@ -54,6 +54,7 @@
 ; (tree-height my-tree)
 
 
+
 ;; Exercise 1.7.4
 ;; 1.7.4 (a)
 (define is-variable? symbol?)
@@ -169,6 +170,7 @@
 (unchurchify (eval-term n*m))
 
 
+
 ;; Exercise 1.7.5
 
 ;; 1.7.5 (a)
@@ -207,7 +209,7 @@
 (define (infer-formula term context)
   (cond
     ((is-variable? term)
-     (cadr (assq term context)))
+     (cadr (assoc term context)))
     ((is-application? term)
      (caddr (infer-formula (car term) context)))
     ((is-abstraction? term)
@@ -234,4 +236,40 @@
 
 
 
+;; Exercise 1.7.6
+(define (applicable? f1 f2)
+  (and (is-implication? f1) (equal? (cadr f1) f2)))
+;; apply two assumptions from the context to one another,
+;; return resulting (term formula)-pair.
+(define (app a-pair1 a-pair2)
+  (list (list (car a-pair1) (car a-pair2)) (caddr (cadr a-pair1))))
 
+(define (prove goal context)
+  (cond 
+    ((member goal (map cadr context))
+     ;; (1) gf already in the context => return its assumption variable
+     (caar (my-filter (lambda (p) (equal? (cadr p) goal)) context)))
+    ((is-implication? goal)
+     ;; (2) implication => use abstraction (-> intro)
+     (let* ((a-var         (gen-var (map car context)))
+            (a-formula     (cadr goal))
+            (subgoal       (caddr goal))
+            (subgoal-proof (prove subgoal
+                             (append (list (list a-var a-formula)) context))))
+       (if subgoal-proof (list 'lambda (list a-var) subgoal-proof) #f)))
+    (else
+     ;; (3) otherwise add forward inferences to context, retry.
+     (let* ((infer-with (lambda (p1) (lambda (p2)
+               (if (applicable? (cadr p1) (cadr p2)) (list (app p1 p2)) '()))))
+            (infs (apply append (map (lambda (p1)
+                  (apply append (map (infer-with p1) context))) context))))
+       (if (null? infs) #f (prove goal (append infs context)))))))
+
+
+(prove '(-> (-> (-> a b) a) a) '()) ;; => #f
+
+(prove '(-> (-> a (-> b c)) (-> (-> a b) (-> a c))) '())
+;; => (lambda (a0) (lambda (a1) (lambda (a2) ((a0 a2) (a1 a2)))))
+
+(prove '(-> (-> a b) (-> (-> b c) (-> a c))) '())
+;; => (lambda (a0) (lambda (a1) (lambda (a2) (a1 (a0 a2)))))
