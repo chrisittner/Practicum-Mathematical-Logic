@@ -189,7 +189,6 @@
 
 (define (is-valid-derivation? term context)
   (and (is-lambda-term? term)
-       (alist? context) ;; context needs to be list of pairs
        (cond
          ((is-variable? term)
           (unique-assoc term context)
@@ -223,14 +222,15 @@
       
 
 ;; Example: Derivation checking
-(define prop1 '(-> (-> A (-> B C)) (-> (-> A B) (-> A C))))
-(define term1 '(lambda (u) (lambda (w) (lambda (v) ((u v) (w v))))))
-(define ctx1  '((u (-> A (-> B C))) (v A) (w (-> A B))))
+(define proposition1 '(-> (-> A (-> B C)) (-> (-> A B) (-> A C))))
+(define term1        '(lambda (u) (lambda (w) (lambda (v) ((u v) (w v))))))
+(define context1     '((u (-> A (-> B C))) (v A) (w (-> A B))))
 
-(is-formula? prop1)
-(infer-formula term1 ctx1)
-(is-valid-derivation? term1 ctx1)
-(is-derivation-of? term1 ctx1 prop1)
+(is-formula? proposition1)
+(infer-formula term1 context1)
+(is-valid-derivation? term1 context1)
+
+(is-derivation-of? term1 context1 proposition1)
 
 
 
