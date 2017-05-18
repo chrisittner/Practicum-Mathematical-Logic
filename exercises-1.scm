@@ -52,54 +52,46 @@
 
 ;; Exercise 1.7.4
 ;; 1.7.4 (a)
-(define (is-lambda-term? t)
-  (cond
-    ;; Case 1: t is a variable (=any quoted symbol)
-    ((symbol? t) #t)
-    ;; Case 2: t is of form '(M N)
-    ((and (= (length t) 2)
-          (is-lambda-term? (car t))
-          (is-lambda-term? (cadr t)))
-     #t)
-    ;; Case 3: t is of form '(lambda (x) N)
-    ((and (= (length t) 3)
-          (eq? (car t) 'lambda)
-          (list? (cadr t))
-          (= (length (cadr t)) 1)
-          (symbol? (caadr t))
-          (is-lambda-term? (caddr t)))
-     #t)
-    ;; Nothing else is a lambda-term..
-    (else #f)))
+(define is-variable? symbol?)
+(define (is-application? term)
+  (and (= (length term) 2)
+       (is-lambda-term? (car term))
+       (is-lambda-term? (cadr term))))
+(define (is-abstraction? term)
+  (and (= (length term) 3)
+       (eq? (car term) 'lambda)
+       (list? (cadr term))
+       (= (length (cadr term)) 1)
+       (symbol? (caadr term))
+       (is-lambda-term? (caddr term))))
+
+(define (is-lambda-term? term)
+  (or (is-variable? term) (is-application? term) (is-abstraction? term)))
 
 ;; 1.7.4 (b)
-(define (my-filter pred lst)
-  (cond ((null? lst) '())
-        ((pred (car lst))
-         (cons (car lst) (my-filter pred (cdr lst))))
-        (else (my-filter pred (cdr lst)))))
-
+(define (my-filter pred list)
+  (cond ((null? list) '())
+        ((pred (car list))
+         (cons (car list) (my-filter pred (cdr list))))
+        (else (my-filter pred (cdr list)))))
 ;; helper function to remove item from list
 (define (list-remove-item item list)
   (my-filter (lambda (x) (not (equal? x item))) list))
 
 (define (free-vars t)
   (cond
-    ((symbol? t) ;; t is a variable
-     (list t))
-    ((= (length t) 2) ;; t is of form '(M N)
-     (append (free-vars (car t)) (free-vars (cadr t))))
-    ((= (length t) 3) ;; t is of form '(lambda x N)
-     (list-remove-item (caadr t) (free-vars (caddr t))))))
+    ((is-variable? t)    (list t))
+    ((is-application? t) (append (free-vars (car t)) (free-vars (cadr t))))
+    ((is-abstraction? t) (list-remove-item (caadr t) (free-vars (caddr t))))))
 
  ;; 1.7.4 (c)
 (define (rename-var t x y)
   (cond
-    ((symbol? t)
+    ((is-variable? t)
      (if (eq? t x) y t))
-    ((= (length t) 2)
+    ((is-application? t)
      (list (rename-var (car t) x y) (rename-var (cadr t) x y)))
-    ((= (length t) 3)
+    ((is-abstraction? t)
      (if (eq? (caadr t) x)
          t
          (list 'lambda (cadr t) (rename-var (caddr t) x y))))))
@@ -115,11 +107,11 @@
 
 (define (substitute t x t-sub)
   (cond
-    ((symbol? t)
+    ((is-variable? t)
      (if (eq? t x) t-sub t))
-    ((= (length t) 2)
+    ((is-application? t)
      (list (substitute (car t) x t-sub) (substitute (cadr t) x t-sub)))
-    ((= (length t) 3)
+    ((is-abstraction? t)
      (if (eq? (caadr t) x)
        t
        ;; here we need to be careful to avoid variable capture
@@ -135,14 +127,14 @@
 ;; 1.7.4 (e)
 (define (eval-term t)
   (cond
-    ((symbol? t) t)
-    ((= (length t) 2)
+    ((is-variable? t) t)
+    ((is-application? t)
      (if (and (list? (car t)) (= (length (car t)) 3))
          ;; t of form '((lambda (x) M) N)
          (eval-term (substitute (caddr (car t)) (caadr (car t)) (cadr t)))
          ;; otherwise '(M N)
          (list (eval-term (car t)) (eval-term (cadr t)))))
-    ((= (length t) 3) (list 'lambda (cadr t) (eval-term (caddr t))))))
+    ((is-abstraction? t) (list 'lambda (cadr t) (eval-term (caddr t))))))
 
 
 ;; Example: arithmetic computations with (eval-term t) and Church numerals
