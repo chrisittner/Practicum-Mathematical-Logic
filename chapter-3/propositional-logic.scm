@@ -71,31 +71,31 @@
 ;(define-connective 'weak-v  '(A B) '(-> (neg (-> (neg A) (neg B))) (weak-v A B)))
 (display-connectives)
 
+;; For each defined connective 'name, define term constants
+;;    'name+_n' and 'name-'
+;; They express the n-th introduction rule or the elimination rule
+;; for the defined connective. Their type is given by the i-clauses of 'name.
 
-;; a list of implicitly defined term constants (corresponding to currently defined connectives)
-;;   for each defined connective 'name, define term constants
-;;      'name+_n' and 'name-'
-;;   They express the n-th introduction rule or the elimination rule
-;;   for the defined connective. Their type is given by the i-clauses of 'name.
-;; TODO finish
+;; returns the derivation term constants (i- and e-constants) and their respective formula types.
+(define (derivation-rules name arity i-clauses)
+  (letrec ((e-rule (list (symbol-append name '-)
+                         (elimination-clause name arity i-clauses)))
+           (i-rules (lambda (i-clauses n)
+                      (if (not (null? i-clauses))
+                          (cons (list (symbol-append name '+_ (number->symbol n)) (1st i-clauses))
+                                (i-rules (cdr i-clauses) (+ 1 n)))
+                               '()))))
+    (append (i-rules i-clauses 0) (list e-rule))))
+    
+;; a list of implicitly defined term constants (corresponding to current list of CONNECTIVES)
 (define (_IE-TERM-CONSTANTS)
-  (let ((e-constants (map (lambda (connective)
-                            (list (symbol-append (1st connective) '-)
-                                  (apply elimination-clause connective)))
-                          CONNECTIVES))
-        (i-constants (letrec ((numbered-i-constants (lambda (name i-clauses n)
-                                                      (if (not (null? i-clauses)) (cons (list (symbol-append name '+_ (string->symbol (number->string n))) (1st i-clauses))
-                                                                                        (numbered-i-constants name (cdr i-clauses) (+ 1 n))) '()))))
-                       (apply append (map (lambda (connective)
-                                            (numbered-i-constants (1st connective) (3rd connective) 1))
-                                          CONNECTIVES)))))
-    (append i-constants e-constants)))
+  (apply append (map (lambda (C) (apply derivation-rules C)) CONNECTIVES)))
 
 (define (display-ie-term-constants)
   (for-each (lambda (C) (display C) (newline)) (_IE-TERM-CONSTANTS)))
 
-
 (display-ie-term-constants)
+
 
 ;; term (list (list var formula) ..) -> boole
 (define (is-valid-derivation? term context)

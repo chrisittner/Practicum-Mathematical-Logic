@@ -32,6 +32,8 @@
 (define (symbol-append . symbols)
   (string->symbol (apply string-append (map symbol->string symbols))))
 
+(define (number->symbol x) (string->symbol (number->string x)))
+
 ;; Untyped Lambda Terms ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
 
