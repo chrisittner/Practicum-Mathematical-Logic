@@ -17,7 +17,6 @@
   (lambda (x) (f (g x))))
 
 
-
 ;; Exercise 1.7.2
 ;; 1.7.1 (a)
 (define (pow x y)
@@ -40,7 +39,6 @@
         ((= (length l) 0) '())
         ((> (length l) 0) (append (rev (cdr l)) (list (car l))))))
 (rev '(1 2 65 2 9))
-
 
 
 ;; Exercise 1.7.3

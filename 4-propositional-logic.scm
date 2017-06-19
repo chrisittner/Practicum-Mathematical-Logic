@@ -1,7 +1,5 @@
-
-;; lambda terms will be used to represent derivations
-(load "lambda-calculus.scm")
-
+;; (simply typed) lambda terms is used to represent derivations
+(load "2-untyped-lambda-calculus.scm")
 
 ;; Propositional logic with "->" primitive & inductively defined connectives ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -40,7 +38,7 @@
       (is-defined-connective? formula)))
 
 
-;; Extends the language by with a defined connective
+;; Extends the language with a defined connective
 ;; e.g. (add-connective '& '(A B) '((-> A (-> B (& A B)))))
 ;;   - arity is the list of arguments for the connective
 ;;   - i-clauses is a (non-empty) list of introduction clauses of shape
@@ -57,10 +55,10 @@
 
 ;; computes the inductive elimination clause for the given connective
 (define (elimination-clause name arity i-clauses)
-  (let* ((evar (gen-var "C" arity))
+  (let* ((elim-var (gen-var "C" arity))
          (ind-clause (map (lambda (i-clause)
-                            (list (1st i-clause) (2nd i-clause) (cons evar arity))) i-clauses)))
-    (list '-> (cons name arity) (list '-> ind-clause (cons evar arity)))))
+                            (list (1st i-clause) (2nd i-clause) (cons elim-var arity))) i-clauses)))
+    (list '-> (cons name arity) (list '-> ind-clause (cons elim-var arity)))))
 
 
 ;; Test: Define usual connectives
@@ -68,28 +66,31 @@
 (define-connective '&    '(A B) '((-> A (-> B (& A B)))))
 (define-connective 'v    '(A B) '((-> A (v A B))
                                   (-> B (v A B))))
-;(define-connective 'weak-v  '(A B) '(-> (neg (-> (neg A) (neg B))) (weak-v A B)))
+;(define-connective 'weak_v   '(A B) '((-> (neg (-> (neg A) (neg B))) (weak_v A B))))
+;(define-connective 'weak_->  '(A B) '((-> (weak-v (neg A) B) (weak_-> A B))))
+;(define-connective 'weak_neg '(A B) '((-> (neg (neg (neg A))) (weak_neg A))))
 (display-connectives)
 
-;; For each defined connective 'name, define term constants
+
+;; For each defined connective 'name, we add term constants
 ;;    'name+_n' and 'name-'
-;; They express the n-th introduction rule or the elimination rule
+;; to the derivation context. They express the n-th introduction rule or the elimination rule
 ;; for the defined connective. Their type is given by the i-clauses of 'name.
 
 ;; returns the derivation term constants (i- and e-constants) and their respective formula types.
-(define (derivation-rules name arity i-clauses)
-  (letrec ((e-rule (list (symbol-append name '-)
-                         (elimination-clause name arity i-clauses)))
-           (i-rules (lambda (i-clauses n)
-                      (if (not (null? i-clauses))
-                          (cons (list (symbol-append name '+_ (number->symbol n)) (1st i-clauses))
-                                (i-rules (cdr i-clauses) (+ 1 n)))
+(define (derivation-constants name arity i-clauses)
+  (letrec ((e-constant (list (symbol-append name '-)
+                             (elimination-clause name arity i-clauses)))
+           (i-constants (lambda (i-clauses n)
+                          (if (not (null? i-clauses))
+                              (cons (list (symbol-append name '+_ (number->symbol n)) (1st i-clauses))
+                                    (i-constants (cdr i-clauses) (+ 1 n)))
                                '()))))
-    (append (i-rules i-clauses 0) (list e-rule))))
+    (append (i-constants i-clauses 0) (list e-constant))))
     
-;; a list of implicitly defined term constants (corresponding to current list of CONNECTIVES)
+;; list of (implicitly) defined term constants, corresponding to current CONNECTIVES
 (define (_IE-TERM-CONSTANTS)
-  (apply append (map (lambda (C) (apply derivation-rules C)) CONNECTIVES)))
+  (apply append (map (lambda (C) (apply derivation-constants C)) CONNECTIVES)))
 
 (define (display-ie-term-constants)
   (for-each (lambda (C) (display C) (newline)) (_IE-TERM-CONSTANTS)))

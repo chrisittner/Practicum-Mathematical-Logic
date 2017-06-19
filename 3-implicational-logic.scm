@@ -1,10 +1,8 @@
+;; (simply typed) lambda terms is used to represent derivations
+(load "2-untyped-lambda-calculus.scm")
 
-;; lambda terms will be used to represent derivations
-(load "lambda-calculus.scm")
-
-
-;; Implicational Propositional Logic ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Minimal implicational logic & derivations ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define (is-implication? formula)
   (and (list? formula)
@@ -50,7 +48,7 @@
        (equal? (infer-formula term context) formula)))
       
 
-;; Derivation checking examples:
+;; Proof checking examples:
 ;(define proposition1 '(-> (-> A (-> B C)) (-> (-> A B) (-> A C))))
 ;(define term1        '(lambda (u) (lambda (w) (lambda (v) ((u v) (w v))))))
 ;(define context1     '((u (-> A (-> B C))) (v A) (w (-> A B))))

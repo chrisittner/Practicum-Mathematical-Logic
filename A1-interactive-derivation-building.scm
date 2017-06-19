@@ -1,8 +1,7 @@
-;; lambda terms will be used to represent derivations
-(load "propositional-logic.scm")
+(load "4-propositional-logic.scm")
 
-;; Interactive helper to construct derivations from bottom to top ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Interactive helper to construct derivation trees/terms from bottom to top ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 ;; We use the following global variable to keep track of the current derivation
