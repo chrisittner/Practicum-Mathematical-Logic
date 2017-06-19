@@ -133,14 +133,3 @@
     (and (is-valid-derivation? term context)
          (is-formula? formula)
          (equal? (infer-formula term context) formula))))
-      
-
-
-
-
-
-
-
-
-
-
