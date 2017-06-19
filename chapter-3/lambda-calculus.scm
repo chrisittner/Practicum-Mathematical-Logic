@@ -28,6 +28,9 @@
 (define (unique-assoc key association-list)
   (= 1 (length (my-filter (lambda (p) (eq? key (car p))) association-list))))
 
+;; concatenates two symbols. (symbol-append 'as 'df) => 'asdf
+(define (symbol-append . symbols)
+  (string->symbol (apply string-append (map symbol->string symbols))))
 
 ;; Untyped Lambda Terms ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;

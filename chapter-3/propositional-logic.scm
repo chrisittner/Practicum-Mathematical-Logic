@@ -3,8 +3,8 @@
 (load "lambda-calculus.scm")
 
 
-;; Propositional logic with "->" primitive & further defined connectives ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Propositional logic with "->" primitive & inductively defined connectives ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;; (all connectives are in prefix notation)
 
@@ -15,7 +15,7 @@
        (is-formula? (cadr formula))
        (is-formula? (caddr formula))))
 
-;; global variable storing currently defined sentential connectives/operators
+;; global variable for storing currently defined sentential connectives/operators
 (define CONNECTIVES '())
 ;; each connective is a triple (name-symbol arity introduction-clauses) where
 ;;   - arity is the list of arguments for the connective
@@ -40,7 +40,7 @@
       (is-defined-connective? formula)))
 
 
-;; Extend the language by with a defined connective
+;; Extends the language by with a defined connective
 ;; e.g. (add-connective '& '(A B) '((-> A (-> B (& A B)))))
 ;;   - arity is the list of arguments for the connective
 ;;   - i-clauses is a (non-empty) list of introduction clauses of shape
@@ -49,77 +49,83 @@
 (define (define-connective name arity i-clauses)
   (if #t ;; TODO: check form + strict positivity
       (set! CONNECTIVES
-            (append (list name arity i-clauses) CONNECTIVES))
+            (cons (list name arity i-clauses) CONNECTIVES))
       (error "ERROR: not a valid definition")))
 
+(define (display-connectives)
+  (for-each (lambda (C) (display C) (newline)) CONNECTIVES))
 
+;; returns the general elimination rule for the given connective,
+;; derived from its introduction rules
+(define (elimination-clause name arity i-clauses)
+  (let ((evar (gen-var "C" arity)))
+    (list '-> (append (list name) arity)
+          (list '-> ;; TODO: express "the competitor evar satisfies all i-clauses"
+                (append (list evar) arity)))))
+
+
+;; Test: Define usual connectives
 (define-connective 'neg  '(A)   '((-> (-> A bot) (neg A))))
 (define-connective '&    '(A B) '((-> A (-> B (& A B)))))
 (define-connective 'v    '(A B) '((-> A (v A B))
                                   (-> B (v A B))))
 ;(define-connective 'weak-v  '(A B) '(-> (neg (-> (neg A) (neg B))) (weak-v A B)))
+(display-connectives)
 
 
-;; TODO: -display current connectives (formula language)
-;;       -display current rules/term languag
-
-
-;; returns the general elimination rule for the given connective,
-;; derived from its introduction rules
-(define (elimination-clause name)
-  (let ((evar (gen-var "C" (_ARITY name))))
-    (list '-> (append (list name) (_ARITY name))
-          (list '-> ;; TODO: express "the competitor evar satisfies all i-clauses"
-                (append (list evar) (_ARITY name))))))
-
-                               
-
-
-
-;; EXERCISE 1: extend the proof term language:
-;;   for each defined connective 'name, accept functions symbols
+;; a list of implicitly defined term constants (corresponding to currently defined connectives)
+;;   for each defined connective 'name, define term constants
 ;;      'name+_n' and 'name-'
-;;   in derivation terms. They express the n-th introduction rule or the elimination rule
+;;   They express the n-th introduction rule or the elimination rule
 ;;   for the defined connective. Their type is given by the i-clauses of 'name.
-
-;; (a) is-valid-derivation? needs to check whether these newly defined term symbols are used type-correctly
-;; (b) infer-formula similarily needs to support the new rules.
-
+;; TODO finish
+(define (_IE-TERM-CONSTANTS)
+  (let ((introduction-constants (apply append (map (lambda (name arity i-clauses)
+                                                     (map (lambda (i-clause)
+                                                            (list (symbol-append name '+_N) i-clause))
+                                                          i-clauses))
+                                                   CONNECTIVES)))
+        (elimination-constants (map (lambda (name arity i-clauses)
+                                     (list (symbol-append name '-) (elimination-clause name)))
+                                   CONNECTIVES)))
+       (append introduction-constants elimination-constants)))
 
 
 ;; term (list (list var formula) ..) -> boole
 (define (is-valid-derivation? term context)
-  (and (is-lambda-term? term)
-       (cond
+  (let ((context (append context (_DEFINED-TERM-CONSTANTS))))
+    (and (is-lambda-term? term)
          ((is-variable? term)
           (unique-assoc term context)
-         ((is-application? term)
-          (let ((f1 (infer-formula (car term) context))
-                (f2 (infer-formula (cadr term) context)))
-            (and (is-valid-derivation? (car term) context)
-                 (is-valid-derivation? (cadr term) context)
-                 (is-implication? f1)
-                 (eq? (cadr f1) f2))))
-         ((is-abstraction? term)
-          (and (is-valid-derivation? (caddr term) context)
-               (unique-assoc (caadr term) context)))))))
+          ((is-application? term)
+           (let ((f1 (infer-formula (car term) context))
+                 (f2 (infer-formula (cadr term) context)))
+             (and (is-valid-derivation? (car term) context)
+                  (is-valid-derivation? (cadr term) context)
+                  (is-implication? f1)
+                  (eq? (cadr f1) f2))))
+          ((is-abstraction? term)
+           (and (is-valid-derivation? (caddr term) context)
+                (unique-assoc (caadr term) context)))))))
 
 ;; term (list (list var formula) ..) -> formula
 (define (infer-formula term context)
-  (cond
-    ((is-variable? term)
-     (cadr (assoc term context)))
-    ((is-application? term)
-     (caddr (infer-formula (car term) context)))
-    ((is-abstraction? term)
-     (let ((antecedent (infer-formula (caadr term) context))
-           (consequent (infer-formula (caddr term) context)))
-       (list '-> antecedent consequent)))))
+  (let ((context (append context (_DEFINED-TERM-CONSTANTS))))
+    (cond
+      ((is-variable? term)
+       (cadr (assoc term context)))
+      ((is-application? term)
+       (caddr (infer-formula (car term) context)))
+      ((is-abstraction? term)
+       (let ((antecedent (infer-formula (caadr term) context))
+             (consequent (infer-formula (caddr term) context)))
+         (list '-> antecedent consequent))))))
 
 (define (is-derivation-of? term context formula)
-  (and (is-valid-derivation? term context)
-       (is-formula? formula)
-       (equal? (infer-formula term context) formula)))
+  (let ((context (append context (_DEFINED-TERM-CONSTANTS))))
+    (and (is-valid-derivation? term context)
+         (is-formula? formula)
+         (equal? (infer-formula term context) formula))))
       
 
 
