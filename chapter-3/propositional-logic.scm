@@ -55,13 +55,12 @@
 (define (display-connectives)
   (for-each (lambda (C) (display C) (newline)) CONNECTIVES))
 
-;; returns the general elimination rule for the given connective,
-;; derived from its introduction rules
+;; computes the inductive elimination clause for the given connective
 (define (elimination-clause name arity i-clauses)
-  (let ((evar (gen-var "C" arity)))
-    (list '-> (append (list name) arity)
-          (list '-> ;; TODO: express "the competitor evar satisfies all i-clauses"
-                (append (list evar) arity)))))
+  (let* ((evar (gen-var "C" arity))
+         (ind-clause (map (lambda (i-clause)
+                            (list (1st i-clause) (2nd i-clause) (cons evar arity))) i-clauses)))
+    (list '-> (cons name arity) (list '-> ind-clause (cons evar arity)))))
 
 
 ;; Test: Define usual connectives
@@ -80,16 +79,23 @@
 ;;   for the defined connective. Their type is given by the i-clauses of 'name.
 ;; TODO finish
 (define (_IE-TERM-CONSTANTS)
-  (let ((introduction-constants (apply append (map (lambda (name arity i-clauses)
-                                                     (map (lambda (i-clause)
-                                                            (list (symbol-append name '+_N) i-clause))
-                                                          i-clauses))
-                                                   CONNECTIVES)))
-        (elimination-constants (map (lambda (name arity i-clauses)
-                                     (list (symbol-append name '-) (elimination-clause name)))
-                                   CONNECTIVES)))
-       (append introduction-constants elimination-constants)))
+  (let ((e-constants (map (lambda (connective)
+                            (list (symbol-append (1st connective) '-)
+                                  (apply elimination-clause connective)))
+                          CONNECTIVES))
+        (i-constants (letrec ((numbered-i-constants (lambda (name i-clauses n)
+                                                      (if (not (null? i-clauses)) (cons (list (symbol-append name '+_ (string->symbol (number->string n))) (1st i-clauses))
+                                                                                        (numbered-i-constants name (cdr i-clauses) (+ 1 n))) '()))))
+                       (apply append (map (lambda (connective)
+                                            (numbered-i-constants (1st connective) (3rd connective) 1))
+                                          CONNECTIVES)))))
+    (append i-constants e-constants)))
 
+(define (display-ie-term-constants)
+  (for-each (lambda (C) (display C) (newline)) (_IE-TERM-CONSTANTS)))
+
+
+(display-ie-term-constants)
 
 ;; term (list (list var formula) ..) -> boole
 (define (is-valid-derivation? term context)
