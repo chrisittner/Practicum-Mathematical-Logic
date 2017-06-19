@@ -29,8 +29,8 @@
   (= 1 (length (my-filter (lambda (p) (eq? key (car p))) association-list))))
 
 
-;; Lambda Terms ;;
-;;;;;;;;;;;;;;;;;;
+;; Untyped Lambda Terms ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (define is-variable? symbol?)
 
