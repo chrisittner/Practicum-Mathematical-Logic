@@ -42,17 +42,18 @@
 ;; For parameter info see comment above, near CONNECTIVES. Example use:
 ;;        (add-connective '& '(A B) '((-> A (-> B (& A B)))))
 (define (define-connective name arguments i-clauses)
-  (if (and (is-symbol? name)
-           (is-list? arguments)
-           (and (map is-symbol? arguments))
-           (is-list? i-clauses)
+  (if (and (symbol? name)
+           (list? arguments)
+           (and (map symbol? arguments))
+           (list? i-clauses)
            ;; check if i-clauses are chained implications ending with new connective formula:
-           (letrec ((new-formula (cons name arguments))
-                    (strip-antecedents
-                     (lambda (formula) (if (is-implication? formula)
-                                           (strip-antecedents (3rd formula)) formula))))
-             (and (map (lambda (i-clause) (equal? (strip-antecedents i-clause) new-formula))
-                       i-clauses))))
+;           (letrec ((new-formula (cons name arguments))
+;                    (strip-antecedents
+;                     (lambda (formula) (if (is-implication? formula)
+;                                           (strip-antecedents (3rd formula)) formula))))
+;             (and (map (lambda (i-clause) (equal? (strip-antecedents i-clause) new-formula))
+;                       i-clauses))))
+           )
   (set! CONNECTIVES (cons (list name arguments i-clauses) CONNECTIVES))
   (error "ERROR: not a valid connective definition")))
 
