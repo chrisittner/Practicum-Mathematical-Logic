@@ -15,16 +15,19 @@
        (is-formula? (cadr formula))
        (is-formula? (caddr formula))))
 
-;; global variable for storing currently defined sentential connectives/operators
-;; (all connectives are in prefix notation)
+;; Global variable for storing defined sentential connectives
 (define CONNECTIVES '())
-;; each connective is a triple (name-symbol arguments introduction-clauses) where
-;;   - arguments is the list of arguments for the connective
-;;   - introduction-clauses is a list of formulas of shape
-;;         (some-formula -> (new-connective ..))
+;; A defined connective is a triple
+;;        (name-symbol arguments introduction-clauses)
+;; consisting in the connectives <name-symbol> (e.g. '&), <arguments> (e.g. '(A B)),
+;; and its <i-clauses>: a list of introduction-clauses, each of which is a chain of
+;; implications with the new connective as consequent:
+;;        ('-> some-formula (new-connective ..))
+;; e.g. '((-> A (-> B (& A B))))
 (define (_ARGUMENTS name)     (2nd (assoc name CONNECTIVES)))
 (define (_I-CLAUSES name) (3rd (assoc name CONNECTIVES)))
 
+;; Note that all connectives are used in Scheme prefix notation
 (define (is-defined-connective? formula)
   (and (list? formula)
        ;; (1) is in CONNECTIVES?
@@ -35,18 +38,25 @@
        (and (map is-formula? (cdr formula)))))
 
 
-;; Extends the language with a defined connective
-;; e.g. (add-connective '& '(A B) '((-> A (-> B (& A B)))))
-;;   - arguments is the list of arguments for the connective
-;;   - i-clauses is a (non-empty) list of introduction clauses of shape
-;;        (some-formula -> (new-connective ..)
+;; Extends the language with a defined connective.
+;; For parameter info see comment above, near CONNECTIVES. Example use:
+;;        (add-connective '& '(A B) '((-> A (-> B (& A B)))))
 (define (define-connective name arguments i-clauses)
-  (if #t ;; TODO: check form
-      (set! CONNECTIVES
-            (cons (list name arguments i-clauses) CONNECTIVES))
-      (error "ERROR: not a valid definition")))
+  (if (and (is-symbol? name)
+           (is-list? arguments)
+           (and (map is-symbol? arguments))
+           (is-list? i-clauses)
+           ;; check if i-clauses are chained implications ending with new connective formula:
+           (letrec ((new-formula (cons name arguments))
+                    (strip-antecedents
+                     (lambda (formula) (if (is-implication? formula)
+                                           (strip-antecedents (3rd formula)) formula))))
+             (and (map (lambda (i-clause) (equal? (strip-antecedents i-clause) new-formula))
+                       i-clauses))))
+  (set! CONNECTIVES (cons (list name arguments i-clauses) CONNECTIVES))
+  (error "ERROR: not a valid connective definition")))
 
-;; computes the inductive elimination clause for the given connective
+;; Computes the inductive elimination clause for the given connective
 (define (elimination-clause name arguments i-clauses)
   (let* ((elim-var (gen-var "C" arguments))
          (ind-clause (map (lambda (i-clause)
