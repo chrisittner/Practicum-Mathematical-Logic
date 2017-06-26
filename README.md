@@ -2,6 +2,7 @@
 Exercise implementations for the practicum to ["Logik II" at LMU, SoSo2017](http://www.mathematik.uni-muenchen.de/~schwicht/lectures/logic/ss17/). The aim of the practicum is to implement a simplified version of the logical machinery underlying the Minlog proof assistant (the theory of which is covered in the lecture).
 
 
+
 #### Planned Files:
 
 - `1-scheme-exercises.scm`
