@@ -1,10 +1,12 @@
-;; (simply typed) lambda terms is used to represent derivations
 (load "2-untyped-lambda-calculus.scm")
 
-;; Propositional logic with "->" primitive & inductively defined connectives ;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Propositional logic with inductively defined connectives ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
-;; (all connectives are in prefix notation)
+(define (is-formula? formula)
+  (or (is-variable? formula)
+      (is-implication? formula)
+      (is-defined-connective? formula)))
 
 (define (is-implication? formula)
   (and (list? formula)
@@ -14,52 +16,50 @@
        (is-formula? (caddr formula))))
 
 ;; global variable for storing currently defined sentential connectives/operators
+;; (all connectives are in prefix notation)
 (define CONNECTIVES '())
-;; each connective is a triple (name-symbol arity introduction-clauses) where
-;;   - arity is the list of arguments for the connective
+;; each connective is a triple (name-symbol arguments introduction-clauses) where
+;;   - arguments is the list of arguments for the connective
 ;;   - introduction-clauses is a list of formulas of shape
 ;;         (some-formula -> (new-connective ..))
-
-(define (_ARITY name)     (2nd (assoc name CONNECTIVES)))
+(define (_ARGUMENTS name)     (2nd (assoc name CONNECTIVES)))
 (define (_I-CLAUSES name) (3rd (assoc name CONNECTIVES)))
 
 (define (is-defined-connective? formula)
   (and (list? formula)
-       ;; (1) is in CONNECTIVES
+       ;; (1) is in CONNECTIVES?
        (member? (1st formula) (map car CONNECTIVES))
-       ;; (2) has correct number of arguments
-       (= (length formula) (+ 1 (length (_ARITY (1st formula)))))
-       ;; (3) each argument is a formula
+       ;; (2) has correct number of arguments?
+       (= (length formula) (+ 1 (length (_ARGUMENTS (1st formula)))))
+       ;; (3) each argument is a formula?
        (and (map is-formula? (cdr formula)))))
-
-(define (is-formula? formula)
-  (or (is-variable? formula)
-      (is-implication? formula)
-      (is-defined-connective? formula)))
 
 
 ;; Extends the language with a defined connective
 ;; e.g. (add-connective '& '(A B) '((-> A (-> B (& A B)))))
-;;   - arity is the list of arguments for the connective
+;;   - arguments is the list of arguments for the connective
 ;;   - i-clauses is a (non-empty) list of introduction clauses of shape
 ;;        (some-formula -> (new-connective ..)
-;;     the new connective may only appear "strictly positive" in 'some-formula.
-(define (define-connective name arity i-clauses)
-  (if #t ;; TODO: check form + strict positivity
+(define (define-connective name arguments i-clauses)
+  (if #t ;; TODO: check form
       (set! CONNECTIVES
-            (cons (list name arity i-clauses) CONNECTIVES))
+            (cons (list name arguments i-clauses) CONNECTIVES))
       (error "ERROR: not a valid definition")))
+
+;; computes the inductive elimination clause for the given connective
+(define (elimination-clause name arguments i-clauses)
+  (let* ((elim-var (gen-var "C" arguments))
+         (ind-clause (map (lambda (i-clause)
+                            (list (1st i-clause)
+                                  (2nd i-clause)
+                                  (cons elim-var arguments)))
+                          i-clauses)))
+    (list '-> (cons name arguments)
+          (list '-> ind-clause (cons elim-var arguments)))))
+
 
 (define (display-connectives)
   (for-each (lambda (C) (display C) (newline)) CONNECTIVES))
-
-;; computes the inductive elimination clause for the given connective
-(define (elimination-clause name arity i-clauses)
-  (let* ((elim-var (gen-var "C" arity))
-         (ind-clause (map (lambda (i-clause)
-                            (list (1st i-clause) (2nd i-clause) (cons elim-var arity))) i-clauses)))
-    (list '-> (cons name arity) (list '-> ind-clause (cons elim-var arity)))))
-
 
 ;; Test: Define usual connectives
 (define-connective 'neg  '(A)   '((-> (-> A bot) (neg A))))
@@ -72,18 +72,22 @@
 (display-connectives)
 
 
-;; For each defined connective 'name, we add term constants
+;; For each defined connective 'name, we allow term constants 
 ;;    'name+_n' and 'name-'
-;; to the derivation context. They express the n-th introduction rule or the elimination rule
-;; for the defined connective. Their type is given by the i-clauses of 'name.
+;; in derivation terms. They express the n-th introduction rule (and the e-rule)
+;; for the defined connective. Their (schematic) type is given by the i-clauses of 'name.
 
-;; returns the derivation term constants (i- and e-constants) and their respective formula types.
-(define (derivation-constants name arity i-clauses)
+;; Takes information of a defined connective and returns the list
+;; of associated term constants together with their parameters
+;; and respective (schematic) types
+(define (derivation-constants name arguments i-clauses)
   (letrec ((e-constant (list (symbol-append name '-)
-                             (elimination-clause name arity i-clauses)))
+                             (elimination-clause name arguments i-clauses)))
            (i-constants (lambda (i-clauses n)
                           (if (not (null? i-clauses))
-                              (cons (list (symbol-append name '+_ (number->symbol n)) (1st i-clauses))
+                              (cons (list (symbol-append name '+_ (number->symbol n))
+                                          arguments
+                                          (1st i-clauses))
                                     (i-constants (cdr i-clauses) (+ 1 n)))
                                '()))))
     (append (i-constants i-clauses 0) (list e-constant))))
@@ -98,26 +102,63 @@
 (display-ie-term-constants)
 
 
+;; when constants appear in derivations their arguments (for
+;; example A,B in "A->B->A&B") have to be replaced with
+;; concrete instances. We need some functions for doing so:
+
+;; propositional substitution ("specialization"): replaces all
+;; occurrences of <variable> with <instance-formula> in <formula>.
+(define (specialize-formula formula variable instance-formula)
+  '() ;; TODO
+  )
+
+;; checks if formula1 can be obtained from  formula2 via substitution.
+;; returns #f if not; if yes, returns list of substitutions of form
+;;     ((variable1 instance-formula1) ..)
+(define (is-specialization-of? formula1 formula2)
+  '() ;; TODO
+  )
+
+;; checks if <term> is (a specialization of) an i/e-constant for any defined
+;; connective. If so, return a pair '(A B), with A being the constant and B
+;; B it's (specialized) type.
+(define (is-ie-constant-instance? term context)
+  '() ;; TODO
+  )
+
+;; i/e-clauses contain schematic variables (A,B,C,..),
+;; if <term> is a i/e-constant instance, this functions adds the
+;; correctly specialised type of the constant to the context
+(define (add-ie-rules-instances term context)
+  (let ((inst-info (is-ie-constant-instance? term context)))
+    (if (inst-info)
+        (let ((ie-constant  (1st inst-info))
+              (instant-type (2nd inst-info)))
+          (cons (ie-constant instant-type) context)
+          context))))
+
+
 ;; term (list (list var formula) ..) -> boole
 (define (is-valid-derivation? term context)
-  (let ((context (append context (_DEFINED-TERM-CONSTANTS))))
+  (let ((context (add-ie-rules-instances term context)))
     (and (is-lambda-term? term)
-         ((is-variable? term)
-          (unique-assoc term context)
-          ((is-application? term)
-           (let ((f1 (infer-formula (car term) context))
-                 (f2 (infer-formula (cadr term) context)))
-             (and (is-valid-derivation? (car term) context)
-                  (is-valid-derivation? (cadr term) context)
-                  (is-implication? f1)
-                  (eq? (cadr f1) f2))))
-          ((is-abstraction? term)
-           (and (is-valid-derivation? (caddr term) context)
-                (unique-assoc (caadr term) context)))))))
+         (cond
+           (is-variable? term)
+           (unique-assoc term context)
+           ((is-application? term)
+            (let ((f1 (infer-formula (car term) context))
+                  (f2 (infer-formula (cadr term) context)))
+              (and (is-valid-derivation? (car term) context)
+                   (is-valid-derivation? (cadr term) context)
+                   (is-implication? f1)
+                   (eq? (cadr f1) f2))))
+           ((is-abstraction? term)
+            (and (is-valid-derivation? (caddr term) context)
+                 (unique-assoc (caadr term) context)))))))
 
 ;; term (list (list var formula) ..) -> formula
 (define (infer-formula term context)
-  (let ((context (append context (_DEFINED-TERM-CONSTANTS))))
+  (let ((context (add-ie-rules-instances term context)))
     (cond
       ((is-variable? term)
        (cadr (assoc term context)))
@@ -128,8 +169,13 @@
              (consequent (infer-formula (caddr term) context)))
          (list '-> antecedent consequent))))))
 
+
+;; TODO: extend as follows
+;  if formulas do not match but the derived formula can be
+;  specialized to target formula by instantiating propositional
+;  variables that do not appear in the context, then it still
+;  counts as a valid derivation
 (define (is-derivation-of? term context formula)
-  (let ((context (append context (_DEFINED-TERM-CONSTANTS))))
-    (and (is-valid-derivation? term context)
-         (is-formula? formula)
-         (equal? (infer-formula term context) formula))))
+  (and (is-valid-derivation? term context)
+       (is-formula? formula)
+       (equal? (infer-formula term context) formula)))
