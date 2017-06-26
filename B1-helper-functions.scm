@@ -16,6 +16,19 @@
 (define (list-remove-item item list)
   (my-filter (lambda (x) (not (equal? x item))) list))
 
+ (define (fold-right f init seq) 
+   (if (null? seq) 
+       init 
+       (f (car seq) 
+           (fold-right f init (cdr seq)))))
+ ;; recursive function (optimized due to proper tail recursion) 
+ (define (fold-left f init seq) 
+   (if (null? seq) 
+       init 
+       (fold-left f 
+                  (f (car seq) init) 
+                  (cdr seq))))
+
 ;; return a fresh variable symbol starting with 'prefix' that is not in set 'used-vars'
 (define (gen-var prefix used-vars . counter)
   (let* ((counter (if (null? counter) 0 (car counter)))

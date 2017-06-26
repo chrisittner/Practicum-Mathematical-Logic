@@ -120,15 +120,50 @@
 ;; propositional substitution ("specialization"): replaces all
 ;; occurrences of <variable> with <instance-formula> in <formula>.
 (define (specialize-formula formula variable instance-formula)
-  '() ;; TODO
-  )
+  (cond
+    ((is-variable? formula)
+     (if (eq? formula variable) instance-formula formula))
+    ((is-implication? formula)
+     (list '-> (specialize-formula (2nd formula) variable instance-formula)
+               (specialize-formula (3rd formula) variable instance-formula)))
+    ((is-defined-connective? formula)
+     (list (car formula) (map (lambda (f) (specialize-formula f variable instance-formula)
+                                (cdr formula)))))))
 
-;; checks if formula1 can be obtained from  formula2 via substitution.
+;(specialize-formula '(-> A B) 'B '(v X Y))
+
+;; checks if formula2 can be obtained from  formula1 via substitution.
 ;; returns #f if not; if yes, returns list of substitutions of form
 ;;     ((variable1 instance-formula1) ..)
 (define (is-specialization-of? formula1 formula2)
-  '() ;; TODO
-  )
+  (car (is-specialization-of?-int formula1 formula2 '())))
+;; use internal function with additional arguments:
+;; <specializations>: list of necessary substitutions (in f1) of form (var subst-formula)
+;; returns pair (<#t or #f> <specializations>),
+;; first component is #f if specialization is not possible
+(define (is-specialization-of?-int f1 f2 specializations)
+  (cond
+    ((equal? f1 f2) (#t '()))
+    ((is-variable? f1)
+     (if (not (member? f1 (map 1st specializations)))
+         (#t (cons (list f1 f2) specializations))
+         (equal? f2 (2nd (assoc f1 specializations)))))
+    ((and (is-implication? f1) (is-implication? f2))
+     (let ((result (is-specialization-of?-int (2nd f1) (2nd f2) specializations))
+           (is-ok? (1st result))
+           (antecedent-specializations (2nd result)))
+       (if is-ok? 
+           (is-specialization-of?-int (3rd f1) (3rd f2) antecedent-specializations)
+           (#f '()))
+    ((and (is-defined-connective? f1) (is-defined-connective? f2)
+          (eq? (1st f1) (1st f2)))
+     (fold-right (lambda (acc sub-f1 sub-f2)
+                  (let ((result (is-specialization-of?-int (2nd acc) sub-f1 sub-f2)))
+                    (list (and (1st acc) (1st result)) (2nd result))))
+                (#t specializations) (cdr f1) (cdr f2)))
+    (otherwise (#f '())))
+  )))
+
 
 ;; checks if <term> is (a specialization of) an i/e-constant for any defined
 ;; connective. If so, return a pair '(A B), with A being the constant and B
