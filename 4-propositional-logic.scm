@@ -49,16 +49,10 @@
            ;; check if i-clauses are chained implications ending with new connective formula:
            (letrec ((new-formula (cons name arguments))
                     (strip-antecedents
-                      (lambda (formula) (if (is-implication? formula)
-                                           (strip-antecedents (3rd formula)) formula))))
-             (begin ;(and (map (lambda (i-clause) (equal? (strip-antecedents i-clause) new-formula))
-                     ;  i-clauses))
-                    (display new-formula)
-                    (display i-clauses)
-                    (display (map display i-clauses))
-                    #t)
-             )
-           )
+                      (lambda (formula) (if (eq? '-> (1st formula))
+                                            (strip-antecedents (3rd formula)) formula))))
+             (and (map (lambda (i-clause) (equal? (strip-antecedents i-clause) new-formula))
+                      i-clauses))))
   (set! CONNECTIVES (cons (list name arguments i-clauses) CONNECTIVES))
   (error "ERROR: not a valid connective definition")))
 
@@ -85,7 +79,7 @@
 ;(define-connective 'weak_v   '(A B) '((-> (neg (-> (neg A) (neg B))) (weak_v A B))))
 ;(define-connective 'weak_->  '(A B) '((-> (weak-v (neg A) B) (weak_-> A B))))
 ;(define-connective 'weak_neg '(A B) '((-> (neg (neg (neg A))) (weak_neg A))))
-;(display-connectives)
+(display-connectives)
 
 
 ;; For each defined connective 'name, we allow term constants 
@@ -115,7 +109,8 @@
 (define (display-ie-term-constants)
   (for-each (lambda (C) (display C) (newline)) (_IE-TERM-CONSTANTS)))
 
-;(display-ie-term-constants)
+(newline)
+(display-ie-term-constants)
 
 
 ;; when constants appear in derivations their arguments (for
