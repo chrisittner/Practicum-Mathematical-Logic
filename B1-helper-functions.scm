@@ -16,18 +16,21 @@
 (define (list-remove-item item list)
   (my-filter (lambda (x) (not (equal? x item))) list))
 
- (define (fold-right f init seq) 
-   (if (null? seq) 
-       init 
-       (f (car seq) 
-           (fold-right f init (cdr seq)))))
- ;; recursive function (optimized due to proper tail recursion) 
- (define (fold-left f init seq) 
-   (if (null? seq) 
-       init 
-       (fold-left f 
-                  (f (car seq) init) 
-                  (cdr seq))))
+;; fold/reduce functions, because they aren't predefined in R5RS Scheme
+;(define (fold-right f init seq) 
+;  (if (null? seq) 
+;      init 
+;      (f (car seq) 
+;          (fold-right f init (cdr seq)))))
+;; recursive function (optimized due to proper tail recursion) 
+(define (fold-left f init seq) 
+  (if (null? seq) 
+      init 
+      (fold-left f (f (car seq) init) (cdr seq))))
+(define (fold2-left f init seq1 seq2)
+  (if (or (null? seq1) (null? seq2))
+      init
+      (fold-left f (f (car seq1) (car seq2) init) (cdr seq1) (cdr seq2))))
 
 ;; return a fresh variable symbol starting with 'prefix' that is not in set 'used-vars'
 (define (gen-var prefix used-vars . counter)

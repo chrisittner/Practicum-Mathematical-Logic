@@ -31,12 +31,11 @@
 (define (is-defined-connective? formula)
   (and (list? formula)
        ;; (1) is in CONNECTIVES?
-       (member? (1st formula) (map car CONNECTIVES))
+       (member (1st formula) (map car CONNECTIVES))
        ;; (2) has correct number of arguments?
        (= (length formula) (+ 1 (length (_ARGUMENTS (1st formula)))))
        ;; (3) each argument is a formula?
        (and (map is-formula? (cdr formula)))))
-
 
 ;; Extends the language with a defined connective.
 ;; For parameter info see comment above, near CONNECTIVES. Example use:
@@ -58,14 +57,15 @@
 
 ;; Computes the inductive elimination clause for the given connective
 (define (elimination-clause name arguments i-clauses)
-  (let* ((elim-var (gen-var "C" arguments))
-         (ind-clause (map (lambda (i-clause)
-                            (list (1st i-clause)
-                                  (2nd i-clause)
-                                  (cons elim-var arguments)))
-                          i-clauses)))
+  (letrec ((elim-var (gen-var "C" arguments))
+           (mk-ind-clause (lambda (i-clause)
+                            (if (is-implication? i-clause)
+                                (list '-> (2nd i-clause) (mk-ind-clause (3rd i-clause)))
+                                elim-var))))
     (list '-> (cons name arguments)
-          (list '-> ind-clause (cons elim-var arguments)))))
+          (fold-left (lambda (i-clause result-formula)
+                       (list '-> (mk-ind-clause i-clause) result-formula))
+                     elim-var i-clauses))))
 
 
 (define (display-connectives)
@@ -88,7 +88,7 @@
 ;; for the defined connective. Their (schematic) type is given by the i-clauses of 'name.
 
 ;; Takes information of a defined connective and returns the list
-;; of associated term constants together with their parameters
+;; of associated term constants together with their arguments
 ;; and respective (schematic) types
 (define (derivation-constants name arguments i-clauses)
   (letrec ((e-constant (list (symbol-append name '-)
@@ -143,50 +143,84 @@
 ;; first component is #f if specialization is not possible
 (define (is-specialization-of?-int f1 f2 specializations)
   (cond
-    ((equal? f1 f2) (#t '()))
+    ((equal? f1 f2) (list #t '()))
     ((is-variable? f1)
-     (if (not (member? f1 (map 1st specializations)))
-         (#t (cons (list f1 f2) specializations))
-         (equal? f2 (2nd (assoc f1 specializations)))))
+     (if (not (member f1 (map 1st specializations)))
+         (list #t (cons (list f1 f2) specializations))
+         (list (equal? f2 (2nd (assoc f1 specializations))) specializations)))
     ((and (is-implication? f1) (is-implication? f2))
-     (let ((result (is-specialization-of?-int (2nd f1) (2nd f2) specializations))
-           (is-ok? (1st result))
+     (let* ((result (is-specialization-of?-int (2nd f1) (2nd f2) specializations))
+            (is-ok? (1st result))
            (antecedent-specializations (2nd result)))
        (if is-ok? 
            (is-specialization-of?-int (3rd f1) (3rd f2) antecedent-specializations)
-           (#f '()))
+           (list #f '()))))
     ((and (is-defined-connective? f1) (is-defined-connective? f2)
           (eq? (1st f1) (1st f2)))
-     (fold-right (lambda (acc sub-f1 sub-f2)
-                  (let ((result (is-specialization-of?-int (2nd acc) sub-f1 sub-f2)))
-                    (list (and (1st acc) (1st result)) (2nd result))))
-                (#t specializations) (cdr f1) (cdr f2)))
-    (otherwise (#f '())))
-  )))
+     (fold2-left (lambda (sub-f1 sub-f2 acc)
+                   (let ((result (is-specialization-of?-int sub-f1 sub-f2 (2nd acc))))
+                     (list (and (1st acc) (1st result)) (2nd result))))
+                 (#t specializations) (cdr f1) (cdr f2)))
+    (else (list #f '()))))
 
-
-;; checks if <term> is (a specialization of) an i/e-constant for any defined
-;; connective. If so, return a pair '(A B), with A being the constant and B
-;; B it's (specialized) type.
-(define (is-ie-constant-instance? term context)
-  '() ;; TODO
-  )
+(is-specialization-of? '(-> (-> a c) f) (specialize-formula '(-> A B) 'B '(v X Y)))
 
 ;; i/e-clauses contain schematic variables (A,B,C,..),
 ;; if <term> is a i/e-constant instance, this functions adds the
 ;; correctly specialised type of the constant to the context
-(define (add-ie-rules-instances term context)
-  (let ((inst-info (is-ie-constant-instance? term context)))
-    (if (inst-info)
-        (let ((ie-constant  (1st inst-info))
-              (instant-type (2nd inst-info)))
-          (cons (ie-constant instant-type) context)
-          context))))
+;(define (add-ie-rule-instance-if-needed connective term context)
+;  (letrec ((get-i-const (lambda (t) (cond ((is-application? t) (get-i-const (2nd t)))
+;                                          ((member t (map car i-constants)) t) ; (_IE-TERM-CONSTANTS)
+;                                          (else #f)))))
+;    (if (get-i-const term)
+;        (i-clause-instance?) ...
+        ; do nothing
+           
+  ;; try to find i-clause in left applications, if yes check if type-correct
+  ;; try to find e-clause, check type
+  ;; extend context
+  ;; done (+renaming?!)
+  
+;    (if (not (null? check-constants))
+;        (cons (caar check-constants inferred-formula) context) ;; need to do some renaming in term+context in order to connect occurrence with type..
+;        context))
+
+;; check if <term> (given <context>) is a type-correct application of <i-const-name>.
+;; returns the list of required argument specializations ((A->f1) ..) of the instance, otherwise #f.
+(define (i-clause-instance? term context i-const-name i-clause connective . arg-specializations)
+  (let* ((arg-specializations (if (null? arg-specializations) '() (car arg-specializations)))
+         (args (_ARGUMENTS connective)))
+    (cond ((and (is-implication? i-clause) (is-application? term))
+           (let* ((premise-type           (infer-formula (2nd term) context)) ; '(t1 _t2_)
+                  (premise-schema         (2nd i-clause))                     ; '(-> _F1_ F2)
+                  (premise-specialization (is-specialization-of?-int
+                                            premise-schema
+                                            premise-type
+                                            arg-specializations)))
+             (if (1st premise-specialization)
+                 (i-clause-instance? (1st term) (3rd i-clause) (2nd premise-specialization))
+                 #f)))
+          ((and (eq? (1st i-clause) connective) (eq? i-const-name term))
+           ; check if all required specializations are allowed.
+           (if (fold-left (lambda (spec acc) (and (member (1st spec) args) acc)) #t arg-specializations)
+               arg-specializations #f))
+          (otherwise #f))))
 
 
+;(i-clause-instance? term context i-const-name i-clause connective)
+
+(define (e-clause-instance? term context i-const-name i-clause connective)
+  '())
+                                                      
+
+
+                               
+
+
+        
 ;; term (list (list var formula) ..) -> boole
 (define (is-valid-derivation? term context)
-  (let ((context (add-ie-rules-instances term context)))
+  (let ((context (add-ie-rule-instance-if-needed term context)))
     (and (is-lambda-term? term)
          (cond
            (is-variable? term)
@@ -204,7 +238,7 @@
 
 ;; term (list (list var formula) ..) -> formula
 (define (infer-formula term context)
-  (let ((context (add-ie-rules-instances term context)))
+  (let ((context (add-ie-rule-instance-if-needed term context)))
     (cond
       ((is-variable? term)
        (cadr (assoc term context)))
@@ -216,12 +250,7 @@
          (list '-> antecedent consequent))))))
 
 
-;; TODO: extend as follows
-;  if formulas do not match but the derived formula can be
-;  specialized to target formula by instantiating propositional
-;  variables that do not appear in the context, then it still
-;  counts as a valid derivation
 (define (is-derivation-of? term context formula)
   (and (is-valid-derivation? term context)
        (is-formula? formula)
-       (equal? (infer-formula term context) formula)))
+       (is-specialization-of? (infer-formula term context) formula)))
