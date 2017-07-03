@@ -133,37 +133,55 @@
 ;(specialize-formula '(-> A B) 'B '(v X Y))
 
 ;; checks if formula2 can be obtained from  formula1 via substitution.
-;; returns #f if not; if yes, returns list of substitutions of form
-;;     ((variable1 instance-formula1) ..)
-(define (is-specialization-of? formula1 formula2)
-  (car (is-specialization-of?-int formula1 formula2 '())))
-;; use internal function with additional arguments:
-;; <specializations>: list of necessary substitutions (in f1) of form (var subst-formula)
-;; returns pair (<#t or #f> <specializations>),
-;; first component is #f if specialization is not possible
-(define (is-specialization-of?-int f1 f2 specializations)
-  (cond
-    ((equal? f1 f2) (list #t '()))
-    ((is-variable? f1)
-     (if (not (member f1 (map 1st specializations)))
-         (list #t (cons (list f1 f2) specializations))
-         (list (equal? f2 (2nd (assoc f1 specializations))) specializations)))
-    ((and (is-implication? f1) (is-implication? f2))
-     (let* ((result (is-specialization-of?-int (2nd f1) (2nd f2) specializations))
-            (is-ok? (1st result))
-           (antecedent-specializations (2nd result)))
-       (if is-ok? 
-           (is-specialization-of?-int (3rd f1) (3rd f2) antecedent-specializations)
-           (list #f '()))))
-    ((and (is-defined-connective? f1) (is-defined-connective? f2)
-          (eq? (1st f1) (1st f2)))
-     (fold2-left (lambda (sub-f1 sub-f2 acc)
-                   (let ((result (is-specialization-of?-int sub-f1 sub-f2 (2nd acc))))
-                     (list (and (1st acc) (1st result)) (2nd result))))
-                 (#t specializations) (cdr f1) (cdr f2)))
-    (else (list #f '()))))
+;; returns pair (<#t or #f> <var-specializations>), first component
+;; is #t if specialization is possible, else #f; <var-specializations> is
+;; list of necessary substitutions (in f1) of form (var subst-formula)
+(define (is-specialization-of? f1 f2 . specializations)
+  (let* ((specializations (if (null? specializations) '() (car specializations))))
+    (cond
+      ((equal? f1 f2) (list #t '()))
+      ((is-variable? f1)
+       (if (not (member f1 (map 1st specializations)))
+           (list #t (cons (list f1 f2) specializations))
+           (list (equal? f2 (2nd (assoc f1 specializations))) specializations)))
+      ((and (is-implication? f1) (is-implication? f2))
+       (let* ((result (is-specialization-of? (2nd f1) (2nd f2) specializations))
+              (is-ok? (1st result))
+              (antecedent-specializations (2nd result)))
+         (if is-ok? 
+             (is-specialization-of? (3rd f1) (3rd f2) antecedent-specializations)
+             (list #f '()))))
+      ((and (is-defined-connective? f1) (is-defined-connective? f2)
+            (eq? (1st f1) (1st f2)))
+       (fold2-left (lambda (sub-f1 sub-f2 acc)
+                     (let ((result (is-specialization-of? sub-f1 sub-f2 (2nd acc))))
+                       (list (and (1st acc) (1st result)) (2nd result))))
+                   (#t specializations) (cdr f1) (cdr f2)))
+      (else (list #f '())))))
 
 (is-specialization-of? '(-> (-> a c) f) (specialize-formula '(-> A B) 'B '(v X Y)))
+
+;; check if <term> (given <context>) is a type-correct application of <i-const-name>.
+;; returns the list of required argument specializations ((A->f1) ..) of the instance, otherwise #f.
+(define (i-clause-instance? term context i-const-name i-clause connective . arg-specializations)
+  (let* ((arg-specializations (if (null? arg-specializations) '() (car arg-specializations)))
+         (args (_ARGUMENTS connective)))
+    (cond ((and (is-implication? i-clause) (is-application? term))
+           (let* ((premise-type           (infer-formula (2nd term) context)) ; '(t1 _t2_)
+                  (premise-schema         (2nd i-clause))                     ; '(-> _F1_ F2)
+                  (premise-specialization (is-specialization-of?
+                                            premise-schema
+                                            premise-type
+                                            arg-specializations)))
+             (if (1st premise-specialization)
+                 (i-clause-instance? (1st term) (3rd i-clause) (2nd premise-specialization))
+                 #f)))
+          ((and (eq? (1st i-clause) connective) (eq? i-const-name term))
+           ; check if all required specializations are allowed.
+           (if (fold-left (lambda (spec acc) (and (member (1st spec) args) acc)) #t arg-specializations)
+               arg-specializations #f))
+          (otherwise #f))))
+
 
 ;; i/e-clauses contain schematic variables (A,B,C,..),
 ;; if <term> is a i/e-constant instance, this functions adds the
@@ -185,26 +203,7 @@
 ;        (cons (caar check-constants inferred-formula) context) ;; need to do some renaming in term+context in order to connect occurrence with type..
 ;        context))
 
-;; check if <term> (given <context>) is a type-correct application of <i-const-name>.
-;; returns the list of required argument specializations ((A->f1) ..) of the instance, otherwise #f.
-(define (i-clause-instance? term context i-const-name i-clause connective . arg-specializations)
-  (let* ((arg-specializations (if (null? arg-specializations) '() (car arg-specializations)))
-         (args (_ARGUMENTS connective)))
-    (cond ((and (is-implication? i-clause) (is-application? term))
-           (let* ((premise-type           (infer-formula (2nd term) context)) ; '(t1 _t2_)
-                  (premise-schema         (2nd i-clause))                     ; '(-> _F1_ F2)
-                  (premise-specialization (is-specialization-of?-int
-                                            premise-schema
-                                            premise-type
-                                            arg-specializations)))
-             (if (1st premise-specialization)
-                 (i-clause-instance? (1st term) (3rd i-clause) (2nd premise-specialization))
-                 #f)))
-          ((and (eq? (1st i-clause) connective) (eq? i-const-name term))
-           ; check if all required specializations are allowed.
-           (if (fold-left (lambda (spec acc) (and (member (1st spec) args) acc)) #t arg-specializations)
-               arg-specializations #f))
-          (otherwise #f))))
+
 
 
 ;(i-clause-instance? term context i-const-name i-clause connective)
