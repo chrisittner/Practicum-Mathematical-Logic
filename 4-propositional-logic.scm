@@ -163,7 +163,7 @@
 
 ;; check if <term> (given <context>) is a type-correct application of <i-const-name>.
 ;; returns the list of required argument specializations ((A->f1) ..) of the instance, otherwise #f.
-(define (i-clause-instance? term context i-const-name i-clause connective . arg-specializations)
+(define (valid-i-clause-instance? term context i-const-name i-clause connective . arg-specializations)
   (let* ((arg-specializations (if (null? arg-specializations) '() (car arg-specializations)))
          (args (_ARGUMENTS connective)))
     (cond ((and (is-implication? i-clause) (is-application? term))
@@ -174,7 +174,7 @@
                                             premise-type
                                             arg-specializations)))
              (if (1st premise-specialization)
-                 (i-clause-instance? (1st term) (3rd i-clause) (2nd premise-specialization))
+                 (valid-i-clause-instance? (1st term) (3rd i-clause) (2nd premise-specialization))
                  #f)))
           ((and (eq? (1st i-clause) connective) (eq? i-const-name term))
            ; check if all required specializations are allowed.
@@ -183,35 +183,12 @@
           (otherwise #f))))
 
 
-;; i/e-clauses contain schematic variables (A,B,C,..),
-;; if <term> is a i/e-constant instance, this functions adds the
-;; correctly specialised type of the constant to the context
-;(define (add-ie-rule-instance-if-needed connective term context)
-;  (letrec ((get-i-const (lambda (t) (cond ((is-application? t) (get-i-const (2nd t)))
-;                                          ((member t (map car i-constants)) t) ; (_IE-TERM-CONSTANTS)
-;                                          (else #f)))))
-;    (if (get-i-const term)
-;        (i-clause-instance?) ...
-        ; do nothing
-           
-  ;; try to find i-clause in left applications, if yes check if type-correct
-  ;; try to find e-clause, check type
-  ;; extend context
-  ;; done (+renaming?!)
-  
-;    (if (not (null? check-constants))
-;        (cons (caar check-constants inferred-formula) context) ;; need to do some renaming in term+context in order to connect occurrence with type..
-;        context))
+;(valid-i-clause-instance? term context i-const-name i-clause connective)
 
-
-
-
-;(i-clause-instance? term context i-const-name i-clause connective)
-
-(define (e-clause-instance? term context i-const-name i-clause connective)
+(define (valid-e-clause-instance? term context e-const-name e-clause connective)
   '())
                                                       
-
+;(valid-e-clause-instance? term context e-const-name e-clause connective)
 
                                
 
@@ -219,34 +196,38 @@
         
 ;; term (list (list var formula) ..) -> boole
 (define (is-valid-derivation? term context)
-  (let ((context (add-ie-rule-instance-if-needed term context)))
-    (and (is-lambda-term? term)
-         (cond
-           (is-variable? term)
-           (unique-assoc term context)
-           ((is-application? term)
-            (let ((f1 (infer-formula (car term) context))
-                  (f2 (infer-formula (cadr term) context)))
-              (and (is-valid-derivation? (car term) context)
-                   (is-valid-derivation? (cadr term) context)
-                   (is-implication? f1)
-                   (eq? (cadr f1) f2))))
-           ((is-abstraction? term)
-            (and (is-valid-derivation? (caddr term) context)
-                 (unique-assoc (caadr term) context)))))))
+  (and (is-lambda-term? term)
+       (cond
+         ((is-variable? term)
+          (unique-assoc term context))
+         ((ie-const-application? term)
+            ;; deal with consts here
+          )
+         ((is-application? term)          
+          (let ((f1 (infer-formula (car term) context))
+                (f2 (infer-formula (cadr term) context)))
+            (and (is-valid-derivation? (car term) context)
+                 (is-valid-derivation? (cadr term) context)
+                 (is-implication? f1)
+                 (eq? (cadr f1) f2))))
+         ((is-abstraction? term)
+          (and (is-valid-derivation? (caddr term) context)
+               (unique-assoc (caadr term) context))))))
 
 ;; term (list (list var formula) ..) -> formula
 (define (infer-formula term context)
-  (let ((context (add-ie-rule-instance-if-needed term context)))
-    (cond
-      ((is-variable? term)
-       (cadr (assoc term context)))
-      ((is-application? term)
-       (caddr (infer-formula (car term) context)))
-      ((is-abstraction? term)
-       (let ((antecedent (infer-formula (caadr term) context))
-             (consequent (infer-formula (caddr term) context)))
-         (list '-> antecedent consequent))))))
+  (cond
+    ((is-variable? term)
+     (cadr (assoc term context)))
+    ((ie-const-application? term)
+       ;; deal with consts here
+     )
+    ((is-application? term)
+     (caddr (infer-formula (car term) context)))
+    ((is-abstraction? term)
+     (let ((antecedent (infer-formula (caadr term) context))
+           (consequent (infer-formula (caddr term) context)))
+       (list '-> antecedent consequent)))))
 
 
 (define (is-derivation-of? term context formula)
