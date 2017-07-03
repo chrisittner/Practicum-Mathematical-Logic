@@ -181,19 +181,15 @@
            (if (fold-left (lambda (spec acc) (and (member (1st spec) args) acc)) #t arg-specializations)
                arg-specializations #f))
           (otherwise #f))))
-
-
 ;(valid-i-clause-instance? term context i-const-name i-clause connective)
 
+
 (define (valid-e-clause-instance? term context e-const-name e-clause connective)
-  '())
-                                                      
+  '())                                                     
 ;(valid-e-clause-instance? term context e-const-name e-clause connective)
 
-                               
 
 
-        
 ;; term (list (list var formula) ..) -> boole
 (define (is-valid-derivation? term context)
   (and (is-lambda-term? term)
