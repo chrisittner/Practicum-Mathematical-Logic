@@ -6,12 +6,14 @@
 (define is-variable? symbol?)
 
 (define (is-application? term)
-  (and (= (length term) 2)
+  (and (list? term)
+       (= (length term) 2)
        (is-lambda-term? (car term))
        (is-lambda-term? (cadr term))))
 
 (define (is-abstraction? term)
-  (and (= (length term) 3)
+  (and (list? term)
+       (= (length term) 3)
        (eq? (car term) 'lambda)
        (list? (cadr term))
        (= (length (cadr term)) 1)

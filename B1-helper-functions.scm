@@ -30,7 +30,15 @@
 (define (fold2-left f init seq1 seq2)
   (if (or (null? seq1) (null? seq2))
       init
-      (fold-left f (f (car seq1) (car seq2) init) (cdr seq1) (cdr seq2))))
+      (fold2-left f (f (car seq1) (car seq2) init) (cdr seq1) (cdr seq2))))
+
+; return #t if all members of l1 are also members of l2, otherwise #f.
+(define (subset? l1 l2)
+  (and (list? l1)
+       (list l2)
+       (fold-left (lambda (x acc) (and (member x l2) acc)) #t l1)))
+;(subset? '(1 2 3) '(12 3 9 2 1))
+;(subset? '(1 2 3) '(12 3 9 2))
 
 ;; return a fresh variable symbol starting with 'prefix' that is not in set 'used-vars'
 (define (gen-var prefix used-vars . counter)

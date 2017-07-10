@@ -92,11 +92,12 @@
 ;; and respective (schematic) types
 (define (derivation-constants name arguments i-clauses)
   (letrec ((e-constant (list (symbol-append name '-)
+                             name
                              (elimination-clause name arguments i-clauses)))
            (i-constants (lambda (i-clauses n)
                           (if (not (null? i-clauses))
                               (cons (list (symbol-append name '+_ (number->symbol n))
-                                          arguments
+                                          name
                                           (1st i-clauses))
                                     (i-constants (cdr i-clauses) (+ 1 n)))
                                '()))))
@@ -113,24 +114,66 @@
 (display-ie-term-constants)
 
 
-;; when constants appear in derivations their arguments (for
-;; example A,B in "A->B->A&B") have to be replaced with
-;; concrete instances. We need some functions for doing so:
+
+;; Note that when constants appear in derivations their arguments (for
+;; example A,B in "A->B->A&B") are replaced with concrete instances.
+
+;; term (list (list var formula) ..) -> boole
+(define (is-valid-derivation? term context)
+  (and (is-lambda-term? term)
+       (cond
+         ((is-variable? term)
+          (unique-assoc term context))
+         ((ie-const-application? term)
+          (1st (valid-ie-clause-instance? term context)))
+         ((is-application? term)          
+          (let ((f1 (infer-formula (car term) context))
+                (f2 (infer-formula (cadr term) context)))
+            (and (is-valid-derivation? (car term) context)
+                 (is-valid-derivation? (cadr term) context)
+                 (is-implication? f1)
+                 (eq? (cadr f1) f2))))
+         ((is-abstraction? term)
+          (and (is-valid-derivation? (caddr term) context)
+               (unique-assoc (caadr term) context))))))
+
+  ;; term (list (list var formula) ..) -> formula
+(define (infer-formula term context)
+  (cond
+    ((is-variable? term)
+     (cadr (assoc term context)))
+    ((ie-const-application? term)
+     (let* ((res (valid-ie-clause-instance? term context))
+            (inferred-formula (2nd res)))
+       inferred-formula))
+    ((is-application? term)
+     (caddr (infer-formula (car term) context)))
+    ((is-abstraction? term)
+     (let ((antecedent (infer-formula (caadr term) context))
+           (consequent (infer-formula (caddr term) context)))
+       (list '-> antecedent consequent)))))
+
+(define (is-derivation-of? term context formula)
+  (and (is-valid-derivation? term context)
+       (is-formula? formula)
+       (is-specialization-of? (infer-formula term context) formula)))
+
+
+
 
 ;; propositional substitution ("specialization"): replaces all
 ;; occurrences of <variable> with <instance-formula> in <formula>.
-(define (specialize-formula formula variable instance-formula)
+(define (specialize formula variable instance-formula)
   (cond
     ((is-variable? formula)
      (if (eq? formula variable) instance-formula formula))
     ((is-implication? formula)
-     (list '-> (specialize-formula (2nd formula) variable instance-formula)
-               (specialize-formula (3rd formula) variable instance-formula)))
+     (list '-> (specialize (2nd formula) variable instance-formula)
+               (specialize (3rd formula) variable instance-formula)))
     ((is-defined-connective? formula)
-     (list (car formula) (map (lambda (f) (specialize-formula f variable instance-formula)
-                                (cdr formula)))))))
-
-;(specialize-formula '(-> A B) 'B '(v X Y))
+     (cons (car formula) (map (lambda (f) (specialize f variable instance-formula))
+                              (cdr formula))))))
+;(specialize '(-> A B) 'B '(v X Y))
 
 ;; checks if formula2 can be obtained from  formula1 via substitution.
 ;; returns pair (<#t or #f> <var-specializations>), first component
@@ -158,75 +201,92 @@
                        (list (and (1st acc) (1st result)) (2nd result))))
                    (#t specializations) (cdr f1) (cdr f2)))
       (else (list #f '())))))
-
-(is-specialization-of? '(-> (-> a c) f) (specialize-formula '(-> A B) 'B '(v X Y)))
-
-;; check if <term> (given <context>) is a type-correct application of <i-const-name>.
-;; returns the list of required argument specializations ((A->f1) ..) of the instance, otherwise #f.
-(define (valid-i-clause-instance? term context i-const-name i-clause connective . arg-specializations)
-  (let* ((arg-specializations (if (null? arg-specializations) '() (car arg-specializations)))
-         (args (_ARGUMENTS connective)))
-    (cond ((and (is-implication? i-clause) (is-application? term))
-           (let* ((premise-type           (infer-formula (2nd term) context)) ; '(t1 _t2_)
-                  (premise-schema         (2nd i-clause))                     ; '(-> _F1_ F2)
-                  (premise-specialization (is-specialization-of?
-                                            premise-schema
-                                            premise-type
-                                            arg-specializations)))
-             (if (1st premise-specialization)
-                 (valid-i-clause-instance? (1st term) (3rd i-clause) (2nd premise-specialization))
-                 #f)))
-          ((and (eq? (1st i-clause) connective) (eq? i-const-name term))
-           ; check if all required specializations are allowed.
-           (if (fold-left (lambda (spec acc) (and (member (1st spec) args) acc)) #t arg-specializations)
-               arg-specializations #f))
-          (otherwise #f))))
-;(valid-i-clause-instance? term context i-const-name i-clause connective)
+;(is-specialization-of? '(-> (-> a c) f) (specialize '(-> A B) 'B '(v X Y)))
 
 
-(define (valid-e-clause-instance? term context e-const-name e-clause connective)
-  '())                                                     
-;(valid-e-clause-instance? term context e-const-name e-clause connective)
+;; Converts a (possibly left-nested) application term into a pair (t args),
+;; where t is the innermost left applicant and args is the list of arguments of t.
+;; Example: (((t0 t1) t2) t3) --> (t0 (t1 t2 t3))
+(define (uncurry-term term)
+  (if (is-application? term)
+      (let ((lterm (uncurry-term (1st term))))
+        (list (1st lterm) (append (2nd lterm) (list (2nd term)))))
+      (list term '())))
+
+;; Converts a (possibly right-nested) implication chain formula into a pair
+;;      (premise-list conclusion).
+;; Example: (-> p1 (-> p2 (-> p3 concl))) --> ((p1 p2 p3) concl)      
+(define (list-premises formula)
+  (if (is-implication? formula)
+      (let ((rformula (list-premises (3rd formula))))
+        (list (cons (2nd formula) (1st rformula))  (2nd rformula)))
+      (list '() formula)))
+;; The inverse: builds a nested implication from a premise-list and conclusion
+(define (unlist-premises premise-list conclusion)
+  (if (null? premise-list)
+      conclusion
+      (list '-> (car premise-list) (unlist-premises (cdr premise-list conclusion)))))
+      
+
+;; Checks if term is an introduction- or eliminiation-constant applied
+;; to one or more terms. returns the constant name, otherwise #f.
+(define (ie-const-application? term)
+  (let* ((ucterm   (uncurry-term term))
+         (const    (1st ucterm))
+         (num-args (length (2nd ucterm))) ; # of subterms the constant is applied to
+         (ie-const (assoc const (_IE-TERM-CONSTANTS))))
+    (if (and ie-const
+             (<= num-args
+                 (length (1st (list-premises (3rd ie-const)))))) ; # of premises in i/e-clause
+        const #f)))
 
 
+;; check if <term> (given <context>) is a type-correct application of <ie-const>.
+;; returns a triple:
+;;    '(is-valid? type specializations)
+;; e.g. (#t '(& A B) '()).
+(define (valid-ie-clause-instance? term context)
+  (let* ((uncurried-term  (uncurry-term term))
+         (ie-const        (car uncurried-term))
+         (connective      (2nd (assoc ie-const (_IE-TERM-CONSTANTS))))
+         (ie-clause       (3rd (assoc ie-const (_IE-TERM-CONSTANTS))))
+         (ie-premises     (1st (list-premises ie-clause)))
+         (ie-conclusion   (2nd (list-premises ie-clause)))
+         (app-terms       (2nd uncurried-term))
+         (app-formulas    (map (lambda (t) (infer-formula t context)) app-terms))
+         (args            (_ARGUMENTS connective))
+         ; check-app determines for one premise(-schema) and one applied term
+         ; whether it a valid instantiation. acc is a pair '(is-ok current-specializations).
+         (check-app (lambda (applicatum-formula premise-schema acc)
+                      (let* ((is-ok       (1st acc))
+                             (specs       (2nd acc))
+                             (spec-result (is-specialization-of? premise-schema applicatum-formula specs))
+                             (new-specs   (2nd spec-result))
+                             ; is-still-ok = is-ok and substitution for current term possible
+                             ;                     and only schematic args subsituted
+                             (is-still-ok (and is-ok
+                                               (1st spec-result)  
+                                               (subset? (map car new-specs) args)))
+                             (new-acc (list is-still-ok new-specs)))
+                        new-acc)))
+         (result          (fold2-left check-app '(#t ()) app-formulas ie-premises))
+         (is-valid        (1st result))
+         (specializations (2nd result))
+         ;; finally we also determine the formula inferred by the derivation term:
+         (rest-clause     (unlist-premises (list-tail ie-premises (length app-terms))
+                                           ie-conclusion))
+         (rest-formula    (if is-valid
+                              ; carry out all determined specializations
+                              (fold-left (lambda (spec cur-formula)
+                                           (specialize cur-formula (1st spec) (2nd spec)))
+                                         rest-clause
+                                         specializations)
+                              '())))
+      (if (1st result)
+        (list #t rest-formula specializations)
+        (list #f '() '()))))
 
-;; term (list (list var formula) ..) -> boole
-(define (is-valid-derivation? term context)
-  (and (is-lambda-term? term)
-       (cond
-         ((is-variable? term)
-          (unique-assoc term context))
-         ((ie-const-application? term)
-            ;; deal with consts here
-          )
-         ((is-application? term)          
-          (let ((f1 (infer-formula (car term) context))
-                (f2 (infer-formula (cadr term) context)))
-            (and (is-valid-derivation? (car term) context)
-                 (is-valid-derivation? (cadr term) context)
-                 (is-implication? f1)
-                 (eq? (cadr f1) f2))))
-         ((is-abstraction? term)
-          (and (is-valid-derivation? (caddr term) context)
-               (unique-assoc (caadr term) context))))))
+(ie-const-application? '((&+_0 u) (v w)))
 
-;; term (list (list var formula) ..) -> formula
-(define (infer-formula term context)
-  (cond
-    ((is-variable? term)
-     (cadr (assoc term context)))
-    ((ie-const-application? term)
-       ;; deal with consts here
-     )
-    ((is-application? term)
-     (caddr (infer-formula (car term) context)))
-    ((is-abstraction? term)
-     (let ((antecedent (infer-formula (caadr term) context))
-           (consequent (infer-formula (caddr term) context)))
-       (list '-> antecedent consequent)))))
-
-
-(define (is-derivation-of? term context formula)
-  (and (is-valid-derivation? term context)
-       (is-formula? formula)
-       (is-specialization-of? (infer-formula term context) formula)))
+(valid-ie-clause-instance? '((&+_0 u) (v w)) '((u F1) (v (-> F2 F3) (w F3))))
+;(infer-formula 'u '((u F1)))
