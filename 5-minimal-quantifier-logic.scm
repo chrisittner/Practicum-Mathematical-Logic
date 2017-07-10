@@ -61,11 +61,12 @@
                  (is-valid-derivation? (cadr term) context)
                  (is-implication? f1)
                  (eq? (cadr f1) f2))))
-         ((is-forall--application? term context)
-          )
-         ((is-abstraction? term)
+         ((is-forall--application? term context) ) ;TODO
+         ((is-->-abstraction? term)
           (and (is-valid-derivation? (caddr term) context)
-               (unique-assoc (caadr term) context)))))))
+               (unique-assoc (caadr term) context)))
+         ((is-forall-abstraction? term) ) ;TODO
+         ))))
 
 (define (infer-formula term context)
   (cond

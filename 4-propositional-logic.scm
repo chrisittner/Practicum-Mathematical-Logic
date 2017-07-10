@@ -289,4 +289,8 @@
 (ie-const-application? '((&+_0 u) (v w)))
 
 (valid-ie-clause-instance? '((&+_0 u) (v w)) '((u F1) (v (-> F2 F3) (w F3))))
-;(infer-formula 'u '((u F1)))
+
+
+(infer-formula '((&+_0 u) (v w)) '((u F1) (v (-> F2 F3) (w F3))))
+
+;(infer-formula '((&- u) (lambda (u1) (lambda (u2) (v u2)))) '((u (& F1 F2) (u1 F1) (u2 F2) (v (-> F2 F3) (w F3)))))
