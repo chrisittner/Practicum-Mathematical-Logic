@@ -82,6 +82,8 @@
 ;(define-connective 'weak_v   '(A B) '((-> (neg (-> (neg A) (neg B))) (weak_v A B))))
 ;(define-connective 'weak_->  '(A B) '((-> (weak-v (neg A) B) (weak_-> A B))))
 ;(define-connective 'weak_neg '(A B) '((-> (neg (neg (neg A))) (weak_neg A))))
+(display "## Defined connectives:")
+(newline)
 (display-connectives)
 
 
@@ -114,7 +116,10 @@
   (for-each (lambda (C) (display C) (newline)) (_IE-TERM-CONSTANTS)))
 
 (newline)
+(display "## Defined term constants:")
+(newline)
 (display-ie-term-constants)
+(newline)
 
 
 
@@ -288,17 +293,13 @@
                                          rest-clause
                                          specializations)
                               '())))
-    (begin
-      (newline)(display "t ")
-      (display result)
-      
       (if (and (1st result)
                (fold-left (lambda (res acc) (and res acc))
                           #t
                           (map (lambda (t) (is-valid-derivation? t context)) app-terms)
                           ))
         (list #t rest-formula specializations)
-        (list #f '() '())))))
+        (list #f '() '()))))
 
 ;(ie-const-application? '((&- u) (v w)))
 ;(valid-ie-clause-instance? '((&+_0 u) (v w)) '((u F1) (v (-> F2 F3)) (w F2)))
@@ -314,8 +315,16 @@
 ;               '((u (& F1 F2)) (u1 F1) (u2 F2) (v (-> F2 F3))))
 
 
+
+
 ;; (Naive) Proof Search ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;; apply function f to every pair of elements from list l
+(define (apply-pairwise f l)
+  (apply append
+         (map (lambda (p1) (map (lambda (p2) (f p1 p2)) l))
+              l)))
 
 (define (applicable? f1 f2)
   (and (is-implication? f1) (equal? (cadr f1) f2)))
@@ -324,6 +333,7 @@
 (define (app a-pair1 a-pair2)
   (list (list (car a-pair1) (car a-pair2)) (caddr (cadr a-pair1))))
 
+
 ;; TODO: Fails to use vacuous assumptions (weakening).
 (define (search-proof goal context)
   (cond 
@@ -331,7 +341,7 @@
      ;; (1) gf already in the context => return its assumption variable
      (caar (my-filter (lambda (p) (equal? (cadr p) goal)) context)))
     ((is-implication? goal)
-     ;; (2) implication => use abstraction (-> intro)
+     ;; (2) implication => use abstraction (-> intro rule) to move premise to context
      (let* ((a-var         (gen-var "a" (map car context)))
             (a-formula     (cadr goal))
             (subgoal       (caddr goal))
@@ -340,18 +350,20 @@
        (if subgoal-proof (list 'lambda (list a-var) subgoal-proof) #f)))
     (else
      ;; (3) otherwise add forward inferences to context, retry.
-     (let* ((infer-with (lambda (p1) (lambda (p2)
-               (if (applicable? (cadr p1) (cadr p2)) (list (app p1 p2)) '()))))
-            (infs (apply append (map (lambda (p1)
-                  (apply append (map (infer-with p1) context))) context))))
+     (let* ((infer-with (lambda (p1 p2)
+               (if (applicable? (cadr p1) (cadr p2)) (list (app p1 p2)) '())))
+            (infs (apply append (apply-pairwise infer-with context))))
        (if (null? infs) #f (search-proof goal (append infs context)))))))
 
 
-;(search-proof '(-> (-> (-> a b) a) a) '()) ;; => #f
+(search-proof '(-> (-> (-> a b) a) a) '()) ;; => #f
 
-;(search-proof '(-> (-> a (-> b c)) (-> (-> a b) (-> a c))) '())
+(search-proof '(-> (-> a (-> b c)) (-> (-> a b) (-> a c))) '())
 ;; => (lambda (a0) (lambda (a1) (lambda (a2) ((a0 a2) (a1 a2)))))
 
-;(search-proof '(-> (-> a b) (-> (-> b c) (-> a c))) '())
+(search-proof '(-> (-> a b) (-> (-> b c) (-> a c))) '())
 ;; => (lambda (a0) (lambda (a1) (lambda (a2) (a1 (a0 a2)))))
+;; => (\ a0 -> (\ a1 -> (\ a2 -> (a1 (a0 a2)))))
+
+
 
