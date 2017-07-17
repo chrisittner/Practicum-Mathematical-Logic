@@ -57,7 +57,7 @@
 
 ;; Computes the inductive elimination clause for the given connective
 (define (elimination-clause name arguments i-clauses)
-  (letrec ((elim-var (gen-var "C" arguments))
+  (letrec ((elim-var (elimination-var arguments))
            (mk-ind-clause (lambda (i-clause)
                             (if (is-implication? i-clause)
                                 (list '-> (2nd i-clause) (mk-ind-clause (3rd i-clause)))
@@ -66,6 +66,9 @@
           (fold-left (lambda (i-clause result-formula)
                        (list '-> (mk-ind-clause i-clause) result-formula))
                      elim-var i-clauses))))
+;; return "competitor" variable to be used in e-clause (usually C0, else C1,..)
+(define (elimination-var arguments)
+  (gen-var "C" arguments))
 
 
 (define (display-connectives)
@@ -256,6 +259,8 @@
          (app-terms       (2nd uncurried-term))
          (app-formulas    (map (lambda (t) (infer-formula t context)) app-terms))
          (args            (_ARGUMENTS connective))
+         (args-and-elimv (cons (elimination-var args) args))
+         
          ; check-app determines for one premise(-schema) and one applied term
          ; whether it a valid instantiation. acc is a pair '(is-ok current-specializations).
          (check-app (lambda (applicatum-formula premise-schema acc)
@@ -267,7 +272,7 @@
                              ;                     and only schematic args subsituted
                              (is-still-ok (and is-ok
                                                (1st spec-result)  
-                                               (subset? (map car new-specs) args)))
+                                               (subset? (map car new-specs) args-and-elimv)))
                              (new-acc (list is-still-ok new-specs)))
                         new-acc)))
          (result          (fold2-left check-app '(#t ()) app-formulas ie-premises))
@@ -283,24 +288,30 @@
                                          rest-clause
                                          specializations)
                               '())))
+    (begin
+      (newline)(display "t ")
+      (display result)
+      
       (if (and (1st result)
                (fold-left (lambda (res acc) (and res acc))
                           #t
                           (map (lambda (t) (is-valid-derivation? t context)) app-terms)
                           ))
         (list #t rest-formula specializations)
-        (list #f '() '()))))
+        (list #f '() '())))))
 
-(ie-const-application? '((&+_0 u) (v w)))
-
+;(ie-const-application? '((&- u) (v w)))
 ;(valid-ie-clause-instance? '((&+_0 u) (v w)) '((u F1) (v (-> F2 F3)) (w F2)))
-
 ;(is-valid-derivation? '((&+_0 u) (v w))
 ;                      '((u F1) (v (-> F2 F3)) (w F2)))
-
 ;(infer-formula '((&+_0 u) (v w))
 ;               '((u F1) (v (-> F2 F3)) (w F2)))
 
+;(ie-const-application? '((&- u) (lambda (u1) (lambda (u2) (v u2)))))
+;(valid-ie-clause-instance? '((&- u) (lambda (u1) (lambda (u2) (v u2))))
+;                           '((u (& F1 F2)) (u1 F1) (u2 F2) (v (-> F2 F3))))
+;(infer-formula '((&- u) (lambda (u1) (lambda (u2) (v u2))))
+;               '((u (& F1 F2)) (u1 F1) (u2 F2) (v (-> F2 F3))))
 
 
 ;; (Naive) Proof Search ;;
@@ -336,13 +347,11 @@
        (if (null? infs) #f (search-proof goal (append infs context)))))))
 
 
-(search-proof '(-> (-> (-> a b) a) a) '()) ;; => #f
+;(search-proof '(-> (-> (-> a b) a) a) '()) ;; => #f
 
-(search-proof '(-> (-> a (-> b c)) (-> (-> a b) (-> a c))) '())
+;(search-proof '(-> (-> a (-> b c)) (-> (-> a b) (-> a c))) '())
 ;; => (lambda (a0) (lambda (a1) (lambda (a2) ((a0 a2) (a1 a2)))))
 
-(search-proof '(-> (-> a b) (-> (-> b c) (-> a c))) '())
+;(search-proof '(-> (-> a b) (-> (-> b c) (-> a c))) '())
 ;; => (lambda (a0) (lambda (a1) (lambda (a2) (a1 (a0 a2)))))
 
-(infer-formula '((&- u) (lambda (u1) (lambda (u2) (v u2))))
-               '((u (& F1 F2)) (u1 F1) (u2 F2) (v (-> F2 F3))))
