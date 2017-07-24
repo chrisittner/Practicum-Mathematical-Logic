@@ -24,13 +24,14 @@
 ;; implications with the new connective as consequent:
 ;;        ('-> some-formula (new-connective ..))
 ;; e.g. '((-> A (-> B (& A B))))
-(define (_ARGUMENTS name)     (2nd (assoc name CONNECTIVES)))
+(define (_ARGUMENTS name) (2nd (assoc name CONNECTIVES)))
 (define (_I-CLAUSES name) (3rd (assoc name CONNECTIVES)))
 
-;; Note that all connectives are used in Scheme prefix notation
+
 (define (is-defined-connective? formula)
   (and (list? formula)
        ;; (1) is in CONNECTIVES?
+       ;; Note that all connectives are used in Scheme prefix notation
        (member (1st formula) (map car CONNECTIVES))
        ;; (2) has correct number of arguments?
        (= (length formula) (+ 1 (length (_ARGUMENTS (1st formula)))))
@@ -87,7 +88,7 @@
 (display-connectives)
 
 
-;; For each defined connective 'name, we allow term constants 
+;; For each defined connective 'name, we allow term constants
 ;;    'name+_n' and 'name-'
 ;; in derivation terms. They express the n-th introduction rule (and the e-rule)
 ;; for the defined connective. Their (schematic) type is given by the i-clauses of 'name.
@@ -107,7 +108,7 @@
                                     (i-constants (cdr i-clauses) (+ 1 n)))
                                '()))))
     (append (i-constants i-clauses 0) (list e-constant))))
-    
+
 ;; list of (implicitly) defined term constants, corresponding to current CONNECTIVES
 (define (_IE-TERM-CONSTANTS)
   (apply append (map (lambda (C) (apply derivation-constants C)) CONNECTIVES)))
@@ -134,7 +135,7 @@
           (unique-assoc term context))
          ((ie-const-application? term)
           (1st (valid-ie-clause-instance? term context)))
-         ((is-application? term)          
+         ((is-application? term)
           (let ((f1 (infer-formula (car term) context))
                 (f2 (infer-formula (cadr term) context)))
             (and (is-valid-derivation? (car term) context)
@@ -200,7 +201,7 @@
        (let* ((result (is-specialization-of? (2nd f1) (2nd f2) specializations))
               (is-ok? (1st result))
               (antecedent-specializations (2nd result)))
-         (if is-ok? 
+         (if is-ok?
              (is-specialization-of? (3rd f1) (3rd f2) antecedent-specializations)
              (list #f '()))))
       ((and (is-defined-connective? f1) (is-defined-connective? f2)
@@ -221,21 +222,25 @@
       (let ((lterm (uncurry-term (1st term))))
         (list (1st lterm) (append (2nd lterm) (list (2nd term)))))
       (list term '())))
+(define (curry-term term arguments)
+  (if (null? arguments)
+    term
+    (curry-term (list term (car arguments)) (cdr arguments))))
 
 ;; Converts a (possibly right-nested) implication chain formula into a pair
 ;;      (premise-list conclusion).
-;; Example: (-> p1 (-> p2 (-> p3 concl))) --> ((p1 p2 p3) concl)      
-(define (list-premises formula)
+;; Example: (-> p1 (-> p2 (-> p3 concl))) --> ((p1 p2 p3) concl)
+(define (unstack-premises formula)
   (if (is-implication? formula)
-      (let ((rformula (list-premises (3rd formula))))
+      (let ((rformula (unstack-premises (3rd formula))))
         (list (cons (2nd formula) (1st rformula))  (2nd rformula)))
       (list '() formula)))
 ;; The inverse: builds a nested implication from a premise-list and conclusion
-(define (unlist-premises premise-list conclusion)
-  (if (null? premise-list)
+(define (stack-premises premises conclusion)
+  (if (null? premises)
       conclusion
-      (list '-> (car premise-list) (unlist-premises (cdr premise-list conclusion)))))
-      
+      (list '-> (car premises) (stack-premises (cdr premises) conclusion))))
+
 
 ;; Checks if term is an introduction- or eliminiation-constant applied
 ;; to one or more terms. returns the constant name, otherwise #f.
@@ -246,7 +251,7 @@
          (ie-const (assoc const (_IE-TERM-CONSTANTS))))
     (if (and ie-const
              (<= num-args
-                 (length (1st (list-premises (3rd ie-const)))))) ; # of premises in i/e-clause
+                 (length (1st (unstack-premises (3rd ie-const)))))) ; # of premises in i/e-clause
         const #f)))
 
 
@@ -259,13 +264,13 @@
          (ie-const        (car uncurried-term))
          (connective      (2nd (assoc ie-const (_IE-TERM-CONSTANTS))))
          (ie-clause       (3rd (assoc ie-const (_IE-TERM-CONSTANTS))))
-         (ie-premises     (1st (list-premises ie-clause)))
-         (ie-conclusion   (2nd (list-premises ie-clause)))
+         (ie-premises     (1st (unstack-premises ie-clause)))
+         (ie-conclusion   (2nd (unstack-premises ie-clause)))
          (app-terms       (2nd uncurried-term))
          (app-formulas    (map (lambda (t) (infer-formula t context)) app-terms))
          (args            (_ARGUMENTS connective))
          (args-and-elimv (cons (elimination-var args) args))
-         
+
          ; check-app determines for one premise(-schema) and one applied term
          ; whether it a valid instantiation. acc is a pair '(is-ok current-specializations).
          (check-app (lambda (applicatum-formula premise-schema acc)
@@ -276,7 +281,7 @@
                              ; is-still-ok = is-ok and substitution for current term possible
                              ;                     and only schematic args subsituted
                              (is-still-ok (and is-ok
-                                               (1st spec-result)  
+                                               (1st spec-result)
                                                (subset? (map car new-specs) args-and-elimv)))
                              (new-acc (list is-still-ok new-specs)))
                         new-acc)))
@@ -284,7 +289,7 @@
          (is-valid        (1st result))
          (specializations (2nd result))
          ;; finally we also determine the formula inferred by the derivation term:
-         (rest-clause     (unlist-premises (list-tail ie-premises (length app-terms))
+         (rest-clause     (stack-premises (list-tail ie-premises (length app-terms))
                                            ie-conclusion))
          (rest-formula    (if is-valid
                               ; carry out all determined specializations
@@ -313,4 +318,3 @@
 ;                           '((u (& F1 F2)) (u1 F1) (u2 F2) (v (-> F2 F3))))
 ;(infer-formula '((&- u) (lambda (u1) (lambda (u2) (v u2))))
 ;               '((u (& F1 F2)) (u1 F1) (u2 F2) (v (-> F2 F3))))
-

@@ -41,6 +41,17 @@
          t
          (list 'lambda (cadr t) (rename-var (caddr t) x y))))))
 
+;; Replace x by t-rep in t (without avoiding variable capture)
+(define (replace t x t-rep)
+  (cond
+    ((is-variable? t)
+     (if (eq? t x) t-rep t))
+    ((is-application? t)
+     (list (replace (car t) x t-rep) (replace (cadr t) x t-rep)))
+    ((is-abstraction? t)
+     (list 'lambda (2nd t) (replace (3rd t) x t-rep)))))
+
+;; Substitute t-sub for x in t.
 (define (substitute t x t-sub)
   (cond
     ((is-variable? t)
@@ -56,7 +67,7 @@
            ;; in this case, the bound variable (cadr t) occurs freely
            ;; in the term we are substituting. We need to rename (cadr t).
            (let* ((used-vars (append (free-vars (caddr t)) (free-vars t-sub)))
-                  (new-var (gen-var used-vars))
+                  (new-var (gen-var "a" used-vars))
                   (renamed-term (rename-var (caddr t) (caadr t) new-var)))
              (list 'lambda new-var (substitute renamed-term x t-sub))))))))
 
